@@ -1,0 +1,5 @@
+debugnfo = true
+debugnfo-lines = true
+
+[env]
+DOC_PATH = "My Games/D32/"

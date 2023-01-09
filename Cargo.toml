@@ -1,0 +1,9 @@
+[workspace.dependencies]
+wgpu = "0.14.2"
+
+[workspace]
+resolver = "2"
+members = [
+    "engine",
+    "d32",
+]
