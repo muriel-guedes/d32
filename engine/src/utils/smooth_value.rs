@@ -15,11 +15,11 @@ impl<T: Copy + SubAssign + AddAssign + Sub<Output = T> + Mul<Output = T>> Smooth
         }
     }
     pub fn get(&mut self) -> T {
-        self.target -= (self.target - self.value) * self.smoothness;
-        self.target
+        self.value -= (self.value - self.target) * self.smoothness;
+        self.value
     }
     pub fn change(&mut self, value: T) {
-        self.value += value * self.speed
+        self.target += value * self.speed
     }
 }
 
@@ -39,12 +39,12 @@ impl<T: Copy + SubAssign + AddAssign + PartialOrd + Sub<Output = T> + Mul<Output
         }
     }
     pub fn get(&mut self) -> T {
-        self.target -= (self.target - self.value) * self.smoothness;
-        self.target
+        self.value -= (self.value - self.target) * self.smoothness;
+        self.value
     }
     pub fn change(&mut self, value: T) {
-        self.value += value * self.speed;
-        if self.value > self.max { self.value = self.max }
-        if self.value < self.min { self.value = self.min }
+        self.target += value * self.speed;
+        if self.target > self.max { self.target = self.max }
+        if self.target < self.min { self.target = self.min }
     }
 }

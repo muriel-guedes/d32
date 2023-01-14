@@ -7,7 +7,7 @@ mod output_texture;  pub use output_texture::*;
 
 pub struct RasterShader {
     pub pipeline: wgpu::ComputePipeline,
-    pub output_texture: Mutex<OutputTexture>
+    pub output: Mutex<Output>
 }
 impl RasterShader {
     pub fn new(
@@ -25,49 +25,32 @@ impl RasterShader {
             entry_point: "main"
         });
         let ws = window.inner_size();
-        let output_texture = OutputTexture::new(device, ws.width, ws.height, &pipeline, copy_pipeline);
+        let output = Output::new(device, ws.width, ws.height, &pipeline, copy_pipeline);
         Self {
             pipeline,
-            output_texture: Mutex::new(output_texture)
+            output: Mutex::new(output)
         }
     }
     pub fn draw(c: &Context) {
-        let output_texture = c.raster_shader.output_texture.lock().unwrap();
+        let output_texture = c.raster_shader.output.lock().unwrap();
         c.queue.write_buffer(&output_texture.depth_buffer, 0, bytemuck::cast_slice(
             &output_texture.depth_buffer_clear_data
         ));
-        let output_texture = {
-            c.queue.write_texture(
-                wgpu::ImageCopyTexture {
-                    texture: &output_texture.texture,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All
-                },
-                &output_texture.clear_data.lock().unwrap(),
-                wgpu::ImageDataLayout {
-                    offset: 0,
-                    bytes_per_row: std::num::NonZeroU32::new(4 * output_texture.size.width),
-                    rows_per_image: std::num::NonZeroU32::new(output_texture.size.height)
-                },
-                output_texture.size
-            );
-            &output_texture.raster_bind_group
-        };
+        c.queue.write_buffer(&output_texture.output_buffer, 0, bytemuck::cast_slice(
+            &output_texture.output_buffer_clear_data
+        ));
 
         let mut encoder = c.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-        let objects = c.objects.lock().unwrap();
+        let chunks = c.chunks.lock().unwrap();
 
         {
             let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
             cpass.set_pipeline(&c.raster_shader.pipeline);
-            cpass.set_bind_group(1, output_texture, &[]);
+            cpass.set_bind_group(1, &output_texture.raster_bind_group, &[]);
             cpass.set_bind_group(2, &c.camera.bind_group, &[]);
-            for object in objects.iter() {
-                for chunk in object.chunks.chunks.iter() {
-                    cpass.set_bind_group(0, &chunk.bind_group, &[]);
-                    cpass.dispatch_workgroups(1, 1, 16);
-                }
+            for chunk in chunks.iter() {
+                cpass.set_bind_group(0, &chunk.bind_group, &[]);
+                cpass.dispatch_workgroups(chunk.size.x / 16, chunk.size.y / 16, chunk.size.z);
             }
         }
 
@@ -79,7 +62,7 @@ impl RasterShader {
         new_size: PhysicalSize<u32>,
         copy_pipeline: &wgpu::RenderPipeline
     ) {
-        *self.output_texture.lock().unwrap() = OutputTexture::new(
+        *self.output.lock().unwrap() = Output::new(
             device, new_size.width, new_size.height, &self.pipeline, copy_pipeline
         );
     }

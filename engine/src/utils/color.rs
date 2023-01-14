@@ -1,3 +1,5 @@
+pub type COLOR = u32;
+
 pub struct Color {
     pub r: u8,
     pub g: u8,
@@ -5,7 +7,7 @@ pub struct Color {
     pub a: u8
 }
 impl Color {
-    pub fn to_u32(&self) -> u32 {
+    pub fn get(&self) -> COLOR {
         ((self.r as u32)<<24) + ((self.g as u32)<<16) + ((self.b as u32)<<8) + (self.a as u32)
     }
 }

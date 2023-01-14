@@ -1,18 +1,24 @@
-use std::sync::Mutex;
-use wgpu::{TextureUsages, util::DeviceExt};
+use wgpu::util::DeviceExt;
 
-pub struct OutputTexture {
-    pub texture: wgpu::Texture,
-    pub size: wgpu::Extent3d,
-    pub view: wgpu::TextureView,
-    pub raster_bind_group: wgpu::BindGroup,
-    pub copy_bind_group: wgpu::BindGroup,
-    pub clear_data: Mutex<Vec<u8>>,
-    pub depth_buffer: wgpu::Buffer,
-    pub depth_buffer_clear_data: Vec<f32>
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct Size {
+    pub width: f32,
+    pub height: f32,
+    pub width_i32: i32,
+    pub height_i32: i32
 }
 
-impl OutputTexture {
+pub struct Output {
+    pub raster_bind_group: wgpu::BindGroup,
+    pub copy_bind_group: wgpu::BindGroup,
+    pub depth_buffer: wgpu::Buffer,
+    pub depth_buffer_clear_data: Vec<f32>,
+    pub output_buffer: wgpu::Buffer,
+    pub output_buffer_clear_data: Vec<u32>
+}
+
+impl Output {
     pub fn new(
         device: &wgpu::Device,
         width: u32,
@@ -27,45 +33,41 @@ impl OutputTexture {
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST
         });
 
-        let size = wgpu::Extent3d {
-            width, height,
-            depth_or_array_layers: 1
-        };
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
+        let output_buffer_clear_data = vec![0u32;(width * height)as usize];
+        let output_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: TextureUsages::STORAGE_BINDING | TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST
+            contents: bytemuck::cast_slice(&output_buffer_clear_data),
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST
         });
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        let size_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::cast_slice(&[Size {
+                width: width as f32,
+                height: height as f32,
+                width_i32: width as i32,
+                height_i32: height as i32
+            }]),
+            usage: wgpu::BufferUsages::STORAGE
+        });
+
         let raster_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &raster_pipeline.get_bind_group_layout(1),
             entries: &vec![
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&view)
+                    resource: output_buffer.as_entire_binding()
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: depth_buffer.as_entire_binding()
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: size_buffer.as_entire_binding()
                 }
             ]
-        });
-        let copy_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Nearest,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            compare: None,
-            lod_min_clamp: -100.0,
-            lod_max_clamp: 100.0,
-            ..Default::default()
         });
         let copy_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
@@ -73,28 +75,21 @@ impl OutputTexture {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&view)
+                    resource: output_buffer.as_entire_binding()
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&copy_sampler)
+                    resource: size_buffer.as_entire_binding()
                 }
             ]
         });
-        let s = size.width * size.height * 4;
-        let mut clear_data = Vec::with_capacity(s as usize);
-        for _ in 0..s {
-            clear_data.push(0);
-        }
         Self {
-            texture,
-            size,
-            view,
             raster_bind_group,
             copy_bind_group,
-            clear_data: Mutex::new(clear_data),
             depth_buffer,
-            depth_buffer_clear_data
+            depth_buffer_clear_data,
+            output_buffer,
+            output_buffer_clear_data
         }
     }
 }

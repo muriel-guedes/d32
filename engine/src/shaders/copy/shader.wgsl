@@ -1,46 +1,45 @@
-struct Output {
-    @builtin(position) position: vec4<f32>,
-    @location(0) uv: vec2<f32>
-};
-
 @vertex
-fn vs_main(@builtin(vertex_index) i: u32) -> Output {
-    var out: Output;
+fn vs_main(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
     switch i32(i) {
         case 0: {
-            out.position = vec4<f32>(-1., 1., 0.0, 1.);
-            out.uv = vec2<f32>(0., 0.);
+            return vec4<f32>(-1., 1., 0., 1.);
         }
         case 1: {
-            out.position = vec4<f32>(-1., -1., 0.0, 1.);
-            out.uv = vec2<f32>(0., 1.);
+            return vec4<f32>(-1., -1., 0., 1.);
         }
         case 2: {
-            out.position = vec4<f32>(1., -1., 0.0, 1.);
-            out.uv = vec2<f32>(1., 1.);
+            return vec4<f32>(1., -1., 0., 1.);
         }
         case 3: {
-            out.position = vec4<f32>(1., 1., 0.0, 1.);
-            out.uv = vec2<f32>(1., 0.);
+            return vec4<f32>(1., 1., 0., 1.);
         }
         case 4: {
-            out.position = vec4<f32>(-1., 1., 0.0, 1.);
-            out.uv = vec2<f32>(0., 0.);
+            return vec4<f32>(-1., 1., 0., 1.);
         }
         default: {
-            out.position = vec4<f32>(1., -1., 0.0, 1.);
-            out.uv = vec2<f32>(1., 1.);
+            return vec4<f32>(1., -1., 0., 1.);
         }
     }
-    return out;
 }
 
 @group(0) @binding(0)
-var texture: texture_2d<f32>;
+var<storage, read_write> output_buffer: array<u32>;
+struct Size {
+    @location(0) width: f32,
+    @location(1) height: f32,
+    @location(2) width_i32: i32,
+    @location(3) height_i32: i32
+};
 @group(0) @binding(1)
-var texture_sampler: sampler;
+var<storage, read> size: Size;
 
 @fragment
-fn fs_main(in: Output) -> @location(0) vec4<f32> {
-    return textureSample(texture, texture_sampler, in.uv);
+fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+    let color = output_buffer[i32(position.x - 0.5) + i32(position.y - 0.5) * size.width_i32];
+    return vec4<f32>(
+        f32(color >> u32(24)) / 255.,
+        f32((color << u32(8)) >> u32(24)) / 255.,
+        f32((color << u32(16)) >> u32(24)) / 255.,
+        1.
+    );
 }

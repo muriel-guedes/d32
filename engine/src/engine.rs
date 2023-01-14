@@ -9,7 +9,7 @@ pub struct Engine {
 }
 impl Engine {
     pub fn new() -> Self {
-        crate::logger::start();
+        crate::start_logger();
         
         let event_loop = EventLoop::new();
         let context = Context::new(&event_loop);

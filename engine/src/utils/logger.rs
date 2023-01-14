@@ -12,7 +12,7 @@ lazy_static::lazy_static! {
     };
 }
 
-pub fn start() {
+pub fn start_logger() {
     let mut builder = Builder::new();
     builder
         .filter(None, LevelFilter::Trace)

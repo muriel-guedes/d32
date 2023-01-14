@@ -50,7 +50,7 @@ impl Default for Settings {
             window_maximized: true,
             vsync: true,
             fov: 90.,
-            near: 1.,
+            near: 10.,
             far: 1000.
         }
     }

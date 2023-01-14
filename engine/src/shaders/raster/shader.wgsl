@@ -1,59 +1,82 @@
 @group(0) @binding(0)
-var<storage, read_write> chunk: array<u32>;
+var<storage, read> chunk_data: array<u32>;
+struct Chunk {
+    @location(0) position: vec4<f32>,
+    @location(1) size: vec4<u32>
+};
+@group(0) @binding(1)
+var<storage, read> chunk: Chunk;
 
-@group(1) @binding(0) 
-var output_texture: texture_storage_2d<rgba8unorm, write>;
+@group(1) @binding(0)
+var<storage, write> output_buffer: array<u32>;
 @group(1) @binding(1)
 var<storage, read_write> depth_buffer: array<f32>;
+struct Size {
+    @location(0) width: f32,
+    @location(1) height: f32,
+    @location(2) width_i32: i32,
+    @location(3) height_i32: i32
+};
+@group(1) @binding(2)
+var<storage, read> size: Size;
 
 struct Camera {
-    @location(0) projection: mat4x4<f32>,
-    @location(1) position: vec4<f32>
+    @location(0) start_projection: mat4x4<f32>,
+    @location(1) final_projection: mat4x4<f32>
 };
 @group(2) @binding(0)
 var<uniform> camera: Camera;
 
 @compute @workgroup_size(16, 16, 1)
-fn main(@builtin(global_invocation_id) i: vec3<u32>) {
-    let texsize = textureDimensions(output_texture);
-
-    let y = i.y * u32(16);
-    let z = i.z * u32(256);
-    let c = chunk[i.x + y + z];
-    let a = (c << u32(24)) >> u32(24);
-    if(a == u32(0)){ return; }
+fn main(@builtin(global_invocation_id) id: vec3<u32>) {
+    if(id.x >= chunk.size.x || id.y >= chunk.size.y){ return; }
+    let color = chunk_data[id.x + (id.y * chunk.size.x) + (id.z * chunk.size.w)];
+    if(color == u32(0)){ return; }
     
-    var pos = camera.projection * vec4<f32>((vec3<f32>(i) - vec3<f32>(8., 8., 8.)), 1.);
-    pos.x /= pos.w;
-    pos.y /= pos.w;
-    pos.z /= pos.w;
-    if(pos.x >= 1. || pos.y >= 1. || pos.z <= 0. || pos.z >= 1.) { return; }
-    pos.x = (pos.x * 0.5 + 0.5) * f32(texsize.x);
-    pos.y = (pos.y * 0.5 + 0.5) * f32(texsize.y);
+    let position = vec3<f32>(id) + chunk.position.xyz;
     
-    let color = vec4<f32>(
-        f32(c >> u32(24)) / 255.,
-        f32(((c << u32(8)) >> u32(24))) / 255.,
-        f32((c << u32(16)) >> u32(24)) / 255.,
-        f32(a) / 255.
-    );
+    var pixel = camera.start_projection * vec4<f32>(position, 1.);
+    pixel.x /= pixel.w;
+    if(pixel.x >= 1.){ return; }
+    pixel.y /= pixel.w;
+    if(pixel.y >= 1.){ return; }
+    pixel.z /= pixel.w;
+    if(pixel.z <= 0. || pixel.z >= 1.){ return; }
+    
+    var final_pixel = camera.final_projection * vec4<f32>(position, 1.);
+    final_pixel.x /= final_pixel.w;
+    if(final_pixel.x <= -1.){ return; }
+    final_pixel.y /= final_pixel.w;
+    if(final_pixel.y <= -1.){ return; }
 
-    let s = i32((1. / pos.w) * 500.);
-    var ps = vec2<i32>(s, s);
-    while(ps.y >= 0) {
-        ps.x = s;
-        while(ps.x >= 0) {
-            let texpos = vec2<i32>(pos.xy) + ps;
-            let i = texpos.x + (texpos.y*texsize.x);
-            ps.x -= 1;
-            if(
-                depth_buffer[i] < pos.w ||
-                texpos.x >= texsize.x || texpos.x <= 0 ||
-                texpos.y >= texsize.y || texpos.y <= 0
-            ) { continue; }
-            depth_buffer[i] = pos.w;
-            textureStore(output_texture, texpos, color);
+    var fx = i32((final_pixel.x * 0.5 + 0.5) * size.width);
+    var fy = i32((final_pixel.y * 0.5 + 0.5) * size.height);
+    if(fx >= size.width_i32){ fx = size.width_i32 - 1; }
+    if(fy >= size.height_i32){ fy = size.height_i32 - 1; }
+
+    var x = i32((pixel.x * 0.5 + 0.5) * size.width);
+    var y = i32((pixel.y * 0.5 + 0.5) * size.height);
+    if(x < 0){ x = 0; }
+    if(y < 0){ y = 0; }
+
+    if(fx < x || fy < y){ return; }
+
+    let startx = x;
+    var i = x + (y * size.width_i32);
+    let y_step = size.width_i32 + x - fx;
+    loop {
+        loop {
+            if(depth_buffer[i] > final_pixel.z) {
+                depth_buffer[i] = final_pixel.z;
+                output_buffer[i] = color;
+            }
+            if(x == fx){ break; }
+            x++;
+            i++;
         }
-        ps.y -= 1;
+        if(y == fy){ return; }
+        y++;
+        i += y_step;
+        x = startx;
     }
 }

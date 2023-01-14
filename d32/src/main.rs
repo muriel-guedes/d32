@@ -1,7 +1,7 @@
+use engine::Terrain;
+
 fn main() {
     let engine = engine::Engine::new();
-    {
-        engine.context.add_object(1);
-    }
+    Terrain::new(&engine.context);
     engine.start()
 }

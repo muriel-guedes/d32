@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use wgpu::{Device, Queue, Surface, SurfaceConfiguration};
 use winit::{window::Window, event_loop::EventLoop, dpi::PhysicalSize};
 
-use crate::{window, Settings, Cursor, utils, RasterShader, CopyShader, Object, Camera};
+use crate::{window, Settings, Cursor, utils, RasterShader, CopyShader, Camera, Chunk};
 
 #[derive(Clone)]
 pub struct Context {
@@ -16,7 +16,7 @@ pub struct Context {
     pub cursor: Arc<Cursor>,
     pub raster_shader: Arc<RasterShader>,
     pub copy_shader: Arc<CopyShader>,
-    pub objects: Arc<Mutex<Vec<Object>>>,
+    pub chunks: Arc<Mutex<Vec<Chunk>>>,
     pub camera: Arc<Camera>,
 }
 impl Context {
@@ -48,7 +48,7 @@ impl Context {
             cursor: Arc::new(cursor),
             raster_shader: Arc::new(raster_shader),
             copy_shader: Arc::new(copy_shader),
-            objects: Arc::new(Mutex::new(Vec::new())),
+            chunks: Arc::new(Mutex::new(Vec::new())),
             camera: Arc::new(camera)
         }
     }
@@ -61,14 +61,21 @@ impl Context {
         self.raster_shader.resize(&self.device, new_size, &self.copy_shader.pipeline);
         self.camera.resize(&self.settings, new_size);
     }
-    pub fn add_object(&self, chunks: usize) -> Object {
-        let object = Object::new(&self.device, &self.raster_shader.pipeline, chunks);
-        self.objects.lock().unwrap().push(object.clone());
-        object
+    pub fn add_chunk(&self, chunk: Chunk) {
+        self.chunks.lock().unwrap().push(chunk);
+    }
+    pub fn remove_chunk(&self, chunk: &Chunk) {
+        let mut chunks = self.chunks.lock().unwrap();
+        for id in 0..chunks.len() {
+            if std::ptr::eq(&chunks[id], chunk) {
+                chunks.remove(id);
+                return
+            }
+        }
     }
     pub fn update(&self) {
-        for object in self.objects.lock().unwrap().iter() {
-            object.update(&self.queue)
+        for chunk in self.chunks.lock().unwrap().iter() {
+            chunk.update(&self.queue)
         }
         self.camera.update(&self.queue, &self.cursor);
     }

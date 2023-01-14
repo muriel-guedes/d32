@@ -35,7 +35,7 @@ impl CopyShader {
                 topology: wgpu::PrimitiveTopology::TriangleList,
                 strip_index_format: None,
                 front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
+                cull_mode: None,
                 polygon_mode: wgpu::PolygonMode::Fill,
                 unclipped_depth: false,
                 conservative: false
@@ -62,7 +62,7 @@ impl CopyShader {
         };
         let view = output_texture.texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-        let input_texture = &c.raster_shader.output_texture.lock().unwrap().copy_bind_group;
+        let input_texture = &c.raster_shader.output.lock().unwrap().copy_bind_group;
         
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
