@@ -11,7 +11,7 @@ pub const PIXEL_SIZE: f32 = 0.75;
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct CameraBinding {
     start_projection: [[f32;4];4],
-    final_projection: [[f32;4];4]
+    final_projection: [[f32;4];4],
 }
 
 pub struct CameraValues {
@@ -34,7 +34,7 @@ impl CameraValues {
             position: Vector3::new(0., 0., 0.),
             rotation_x: SmoothValue::new(0., 0.0015, 0.12),
             rotation_y: SmoothValue::new(0., 0.0015, 0.12),
-            distance: SmoothValueBounded::new(128., 0.5, 0.1, 1., 128.)
+            distance: SmoothValueBounded::new(32., 0.5, 0.1, 1., 64.)
         }
     }
     pub fn update(&mut self, cursor: &Cursor) {

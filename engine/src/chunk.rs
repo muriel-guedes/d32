@@ -23,13 +23,12 @@ pub struct Chunk {
 }
 impl Chunk {
     pub fn new(
-        device: &wgpu::Device,
-        raster_pipeline: &wgpu::ComputePipeline,
+        c: &Context,
         data: Vec<COLOR>,
         position: Vector3<f32>,
         size: Vector3<u32>
     ) -> Self {
-        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let buffer = c.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
             contents: bytemuck::cast_slice(&data),
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST
@@ -38,14 +37,14 @@ impl Chunk {
             position: position.extend(1.).into(),
             size: [size.x, size.y, size.z, size.x * size.y].into()
         };
-        let chunk_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let chunk_buffer = c.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
             contents: bytemuck::cast_slice(&[binding]),
             usage: wgpu::BufferUsages::STORAGE
         });
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let bind_group = c.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
-            layout: &raster_pipeline.get_bind_group_layout(0),
+            layout: &c.raster_shader.pipeline.get_bind_group_layout(0),
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -57,14 +56,16 @@ impl Chunk {
                 }
             ]
         });
-        Self {
+        let s = Self {
             data: Arc::new(Mutex::new(data)),
             buffer: Arc::new(buffer),
             bind_group: Arc::new(bind_group),
             needs_update: Arc::new(AtomicBool::new(true)),
             position: Arc::new(Mutex::new(position)),
             size: Arc::new(size)
-        }
+        };
+        c.add_chunk(s.clone());
+        s
     }
     pub fn update(&self, queue: &wgpu::Queue) {
         if !self.needs_update.load(std::sync::atomic::Ordering::Relaxed) { return }
@@ -94,7 +95,7 @@ impl Chunk {
                 }
             }
         }
-        Self::new(&c.device, &c.raster_shader.pipeline, data, position, size)
+        Self::new(&c, data, position, size)
     }
     pub fn new_gradient_filled_cube(
         c: &Context,
@@ -114,6 +115,6 @@ impl Chunk {
                 }
             }
         }
-        Self::new(&c.device, &c.raster_shader.pipeline, data, position, size)
+        Self::new(&c, data, position, size)
     }
 }

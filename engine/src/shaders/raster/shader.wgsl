@@ -32,6 +32,17 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     if(id.x >= chunk.size.x || id.y >= chunk.size.y){ return; }
     let color = chunk_data[id.x + (id.y * chunk.size.x) + (id.z * chunk.size.w)];
     if(color == u32(0)){ return; }
+    if(
+        id.x != u32(0) && id.x < chunk.size.x - u32(1) &&
+        id.y != u32(0) && id.y < chunk.size.y - u32(1) &&
+        id.z != u32(0) && id.z < chunk.size.z - u32(1) &&
+        chunk_data[id.x + u32(1) + (id.y * chunk.size.x) + (id.z * chunk.size.w)] != u32(0) &&
+        chunk_data[id.x - u32(1) + (id.y * chunk.size.x) + (id.z * chunk.size.w)] != u32(0) &&
+        chunk_data[id.x + ((id.y - u32(1)) * chunk.size.x) + (id.z * chunk.size.w)] != u32(0) &&
+        chunk_data[id.x + ((id.y + u32(1)) * chunk.size.x) + (id.z * chunk.size.w)] != u32(0) &&
+        chunk_data[id.x + (id.y * chunk.size.x) + ((id.z + u32(1)) * chunk.size.w)] != u32(0) &&
+        chunk_data[id.x + (id.y * chunk.size.x) + ((id.z - u32(1)) * chunk.size.w)] != u32(0)
+    ) { return; }
     
     let position = vec3<f32>(id) + chunk.position.xyz;
     
