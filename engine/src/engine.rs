@@ -1,7 +1,7 @@
 use winit::{event_loop::{EventLoop, ControlFlow}, platform::run_return::EventLoopExtRunReturn,
     event::{Event, WindowEvent, KeyboardInput, VirtualKeyCode, ElementState}};
 
-use crate::{Context, RasterShader, CopyShader};
+use crate::Context;
 
 pub struct Engine {
     pub event_loop: Option<EventLoop<()>>,
@@ -47,11 +47,7 @@ impl Engine {
                     _ => {}
                 },
                 Event::MainEventsCleared => c.window.request_redraw(),
-                Event::RedrawRequested(_) => {
-                    CopyShader::draw(&c);
-                    c.update();
-                    RasterShader::draw(&c);
-                },
+                Event::RedrawRequested(_) => c.draw(),
                 _ => {}
             }
         });

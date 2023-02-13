@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use wgpu::{Device, Queue, Surface, SurfaceConfiguration};
 use winit::{window::Window, event_loop::EventLoop, dpi::PhysicalSize};
 
-use crate::{window, Settings, Cursor, utils, RasterShader, CopyShader, Camera, Chunk};
+use crate::{window, Settings, Cursor, utils, Camera, shader, Chunks};
 
 #[derive(Clone)]
 pub struct Context {
@@ -14,10 +14,9 @@ pub struct Context {
     pub device: Arc<Device>,
     pub queue: Arc<Queue>,
     pub cursor: Arc<Cursor>,
-    pub raster_shader: Arc<RasterShader>,
-    pub copy_shader: Arc<CopyShader>,
-    pub chunks: Arc<Mutex<Vec<Chunk>>>,
+    pub shader: Arc<wgpu::RenderPipeline>,
     pub camera: Arc<Camera>,
+    pub chunks: Arc<Chunks>
 }
 impl Context {
     pub fn new(event_loop: &EventLoop<()>) -> Self {
@@ -34,9 +33,9 @@ impl Context {
         
         let cursor = Cursor::new(&window);
 
-        let copy_shader = CopyShader::new(&device, surface_config.format);
-        let raster_shader = RasterShader::new(&device, &window, &copy_shader.pipeline);
-        let camera = Camera::new(&settings, &device, &window, &cursor, &raster_shader.pipeline);
+        let shader = shader::new(&device, surface_config.format);
+        let camera = Camera::new(&device, &window, &shader);
+        let chunks = Chunks::new(&device, &shader);
 
         Self {
             window: Arc::new(window),
@@ -46,10 +45,9 @@ impl Context {
             device: Arc::new(device),
             queue: Arc::new(queue),
             cursor: Arc::new(cursor),
-            raster_shader: Arc::new(raster_shader),
-            copy_shader: Arc::new(copy_shader),
-            chunks: Arc::new(Mutex::new(Vec::new())),
-            camera: Arc::new(camera)
+            shader: Arc::new(shader),
+            camera: Arc::new(camera),
+            chunks: Arc::new(chunks)
         }
     }
     pub fn resize(&self, new_size: PhysicalSize<u32>) {
@@ -58,26 +56,12 @@ impl Context {
         surface_config.width = new_size.width;
         surface_config.height = new_size.height;
         self.surface.configure(&self.device, &surface_config);
-        self.raster_shader.resize(&self.device, new_size, &self.copy_shader.pipeline);
-        self.camera.resize(&self.settings, new_size);
+        self.camera.resize(new_size);
     }
-    pub fn add_chunk(&self, chunk: Chunk) {
-        self.chunks.lock().unwrap().push(chunk);
-    }
-    pub fn remove_chunk(&self, chunk: &Chunk) {
-        let mut chunks = self.chunks.lock().unwrap();
-        for id in 0..chunks.len() {
-            if std::ptr::eq(&chunks[id], chunk) {
-                chunks.remove(id);
-                return
-            }
-        }
-    }
-    pub fn update(&self) {
-        for chunk in self.chunks.lock().unwrap().iter() {
-            chunk.update(&self.queue)
-        }
-        self.camera.update(&self.queue, &self.cursor);
+    pub fn draw(&self) {
+        self.camera.update(&self.queue);
+        self.chunks.update();
+        shader::draw(self);
     }
 }
 

@@ -1,63 +1,49 @@
 use std::sync::Mutex;
-use cgmath::{Matrix4, Quaternion, Rotation3, Vector3, Rad, Point3};
+
+use cgmath::{Vector3, InnerSpace};
 use wgpu::{util::DeviceExt, Queue};
 use winit::{window::Window, dpi::PhysicalSize};
-
-use crate::{settings::Settings, utils::{SmoothValue, SmoothValueBounded}, cursor::Cursor};
-
-pub const PIXEL_SIZE: f32 = 0.75;
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct CameraBinding {
-    start_projection: [[f32;4];4],
-    final_projection: [[f32;4];4],
+    pub position: [f32;4],
+    pub centre: [f32;4],
+    pub u: [f32;4],
+    pub v: [f32;4],
 }
 
+#[derive(Clone)]
 pub struct CameraValues {
-    perspective: Matrix4<f32>,
-    position: Vector3<f32>,
-    rotation_x: SmoothValue<f32>,
-    rotation_y: SmoothValue<f32>,
-    distance: SmoothValueBounded<f32>
+    pub position: Vector3<f32>,
+    pub lookat: Vector3<f32>,
+    pub up: Vector3<f32>,
+    pub length: f32,
+    pub horizontal_size: f32,
+    pub aspect_ratio: f32,
+
+    pub alignment: Vector3<f32>,
+    pub u: Vector3<f32>,
+    pub v: Vector3<f32>,
+    pub centre: Vector3<f32>
 }
 impl CameraValues {
-    pub fn new(
-        settings: &Settings,
-        window: &Window
-    ) -> Self {
-        let window_size = window.inner_size();
-        let aspect = window_size.width as f32 / window_size.height as f32;
-        let perspective = cgmath::perspective(cgmath::Deg(settings.fov), aspect, settings.near, settings.far);
-        Self {
-            perspective,
-            position: Vector3::new(0., 0., 0.),
-            rotation_x: SmoothValue::new(0., 0.0015, 0.12),
-            rotation_y: SmoothValue::new(0., 0.0015, 0.12),
-            distance: SmoothValueBounded::new(32., 0.5, 0.1, 1., 64.)
-        }
+    pub fn update(&mut self) {
+        self.alignment = (self.lookat - self.position).normalize();
+        self.u = self.alignment.cross(self.up).normalize();
+        self.v = self.u.cross(self.alignment).normalize();
+        self.centre = self.position + (self.alignment * self.length);
+        self.u *= self.horizontal_size;
+        self.v *= self.horizontal_size / self.aspect_ratio;
     }
-    pub fn update(&mut self, cursor: &Cursor) {
-        self.distance.change(-cursor.wheel_movement());
-        let movement = cursor.get_movement();
-        self.rotation_x.change(-movement.y as f32);
-        self.rotation_y.change(movement.x as f32);
-        let rotation = Quaternion::from_angle_y(Rad(self.rotation_y.get())) * Quaternion::from_angle_x(Rad(self.rotation_x.get()));
-        self.position = rotation * Vector3::new(0., 0., self.distance.get());
-    }
-    pub fn resize(&mut self, settings: &Settings, new_size: PhysicalSize<u32>) {
-        let aspect = new_size.width as f32 / new_size.height as f32;
-        self.perspective = cgmath::perspective(cgmath::Deg(settings.fov), aspect, settings.near, settings.far);
-    }
-    pub fn get_binding(&self) -> CameraBinding {
-        let view = cgmath::Matrix4::look_at_rh(
-            Point3::from_homogeneous(self.position.extend(1.)),
-            [0.;3].into(),
-            [0., 1., 0.].into()
-        );
+}
+impl Into<CameraBinding> for CameraValues {
+    fn into(self) -> CameraBinding {
         CameraBinding {
-            start_projection: (self.perspective * Matrix4::from_translation([-PIXEL_SIZE,-PIXEL_SIZE,0.].into()) * view).into(),
-            final_projection: (self.perspective * Matrix4::from_translation([PIXEL_SIZE,PIXEL_SIZE,0.].into()) * view).into()
+            position: self.position.extend(1.).into(),
+            centre: self.centre.extend(1.).into(),
+            u: self.u.extend(1.).into(),
+            v: self.v.extend(1.).into()
         }
     }
 }
@@ -70,24 +56,33 @@ pub struct Camera {
 
 impl Camera {
     pub fn new(
-        settings: &Settings,
         device: &wgpu::Device,
         window: &Window,
-        cursor: &Cursor,
-        raster_pipeline: &wgpu::ComputePipeline
+        raytrace_shader: &wgpu::RenderPipeline
     ) -> Self {
-        let mut values = CameraValues::new(settings, window);
-        values.update(cursor);
+        let values = CameraValues {
+            position: [0., -2., 0.].into(),
+            lookat: [0.;3].into(),
+            up: [0., 0., 1.].into(),
+            length: 1.,
+            horizontal_size: 1.,
+            aspect_ratio: 1.,
+
+            alignment: [0.;3].into(),
+            centre: [0.;3].into(),
+            u: [0.;3].into(),
+            v: [0.;3].into()
+        };
         let buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: None,
-                contents: bytemuck::cast_slice(&[values.get_binding()]),
+                contents: bytemuck::cast_slice(&[ CameraBinding::from(values.clone().into()) ]),
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST
             }
         );
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
-            layout: &raster_pipeline.get_bind_group_layout(2),
+            layout: &raytrace_shader.get_bind_group_layout(0),
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -101,12 +96,11 @@ impl Camera {
             values: Mutex::new(values)
         }
     }
-    pub fn update(&self, queue: &Queue, cursor: &Cursor) {
+    pub fn update(&self, queue: &Queue) {
         let mut values = self.values.lock().unwrap();
-        values.update(cursor);
-        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[values.get_binding()]))
+        values.update();
+        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[ CameraBinding::from(values.clone().into()) ]))
     }
-    pub fn resize(&self, settings: &Settings, new_size: PhysicalSize<u32>) {
-        self.values.lock().unwrap().resize(settings, new_size)
+    pub fn resize(&self, new_size: PhysicalSize<u32>) {
     }
 }

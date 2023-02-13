@@ -3,8 +3,8 @@ mod utils;     pub use utils::*;
 mod window;    pub use window::*;
 mod settings;  pub use settings::*;
 mod context;   pub use context::*;
-mod cursor;    pub use cursor::*;
-mod shaders;   pub use shaders::*;
-mod chunk;     pub use chunk::*;
 mod camera;    pub use camera::*;
-mod assets;    pub use assets::*;
+mod chunks;    pub use chunks::*;
+mod chunk;     pub use chunk::*;
+
+pub mod shader;

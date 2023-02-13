@@ -4,7 +4,7 @@ use winit::window::Window;
 use crate::settings::Settings;
 
 mod smooth_value;  pub use smooth_value::*;
-mod color;         pub use color::*;
+mod cursor;        pub use cursor::*;
 mod logger;        pub use logger::*;
 
 pub fn create_adapter(instance: &wgpu::Instance, surface: &wgpu::Surface) -> wgpu::Adapter {
